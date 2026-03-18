@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flora AI - Nhận Diện Hoa Trực Tiếp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary: #10b981; --bg: #f8fafc; --text: #1e293b; --shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background: var(--bg); color: var(--text); overflow-x: hidden; }
+        
+        /* Nav */
+        nav { background: white; padding: 1rem 5%; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; position: sticky; top:0; z-index:100; }
+        .logo { font-weight: 800; color: var(--primary); cursor: pointer; text-decoration: none; font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
+        .nav-link { margin-left: 20px; text-decoration: none; color: #64748b; font-weight: 600; cursor: pointer; }
+        .nav-link.active { color: var(--primary); }
+
+        .container { max-width: 1100px; margin: 2rem auto; padding: 0 20px; padding-bottom: 100px; }
+        .view-section { display: none; }
+        .view-section.active { display: block; animation: fadeIn 0.4s; }
+
+        /* Card & Grid */
+        .card { background: white; border-radius: 16px; padding: 2rem; box-shadow: var(--shadow); position: relative; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .flower-item { background: white; border-radius: 12px; overflow: hidden; border: 1px solid #eee; transition: 0.3s; cursor: pointer; }
+        .flower-item:hover { transform: translateY(-5px); box-shadow: var(--shadow); }
+        .flower-img { width: 100%; height: 200px; object-fit: cover; }
+        .flower-body { padding: 15px; }
+
+        /* Camera & Scanner UI */
+        #camera-container { position: relative; width: 100%; max-width: 640px; margin: 0 auto 20px; border-radius: 16px; overflow: hidden; background: black; box-shadow: var(--shadow); aspect-ratio: 4/3; }
+        #video { width: 100%; height: 100%; object-fit: cover; }
+        #scanner-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        #scanner-frame { width: 60%; height: 60%; border: 4px solid rgba(255, 255, 255, 0.8); border-radius: 20px; box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5); position: relative; }
+        #scanner-line { position: absolute; left: 10%; right: 10%; top: 50%; height: 4px; background: var(--primary); border-radius: 2px; box-shadow: 0 0 10px var(--primary); animation: scanMove 2s infinite ease-in-out; display: none; }
+        
+        @keyframes scanMove { 
+            0%, 100% { top: 10%; opacity: 0.2; } 
+            50% { top: 90%; opacity: 1; } 
+        }
+
+        #status-indicator { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.6); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #ccc; }
+        .status-dot.active { background: #ef4444; animation: pulse 1.5s infinite; }
+
+        /* Modal Chi Tiết */
+        #modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 20px; backdrop-filter: blur(5px); }
+        .modal-content { background: white; width: 100%; max-width: 700px; border-radius: 20px; overflow: hidden; position: relative; animation: zoomIn 0.3s; max-height: 90vh; overflow-y: auto; }
+        .modal-close { position: absolute; top: 15px; right: 15px; background: white; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 1; }
+
+        .btn { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-secondary { background: #64748b; }
+
+        .form-control { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .form-control:focus { outline: none; border-color: var(--primary); ring: 2px var(--primary); }
+
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        @keyframes zoomIn { from { transform: scale(0.9); opacity:0; } to { transform: scale(1); opacity:1; } }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+
+        /* Chat */
+        #chat-ui { position: fixed; bottom: 90px; right: 20px; width: 320px; height: 450px; background: white; border-radius: 15px; box-shadow: var(--shadow); display: none; flex-direction: column; z-index: 1000; border: 1px solid #e2e8f0; overflow: hidden; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="logo" onclick="location.reload()"><i class="fas fa-seedling"></i> FLORA AI</a>
+    <div>
+        <a class="nav-link active" onclick="switchView('view-recognize')">Nhận Diện</a>
+        <a class="nav-link" onclick="switchView('view-gallery')">Thư Viện</a>
+        <span id="userSection"></span>
+    </div>
+</nav>
+
+<div class="container">
+    <div id="view-auth" class="view-section active">
+        <div class="card" style="max-width: 400px; margin: auto; text-align: center;">
+            <i class="fas fa-user-circle fa-4x" style="color:#e2e8f0; margin-bottom:15px"></i>
+            <h2 id="authT" style="margin-bottom:20px">Đăng Nhập</h2>
+            <input type="text" id="au" class="form-control" placeholder="Tên đăng nhập">
+            <input type="password" id="ap" class="form-control" placeholder="Mật khẩu">
+            <button class="btn" style="width:100%" onclick="auth()">Xác Nhận</button>
+            <p onclick="toggleA()" style="margin-top:15px; cursor:pointer; color:var(--primary); font-size:0.9rem">Chưa có tài khoản? Đăng ký ngay</p>
+        </div>
+    </div>
+
+    <div id="view-recognize" class="view-section">
+        <div class="card" style="text-align: center;">
+            <h2 style="margin-bottom:10px">Nhận Diện Trực Tiếp</h2>
+            <p style="color:#64748b; margin-bottom:20px; font-size:0.9rem">Hãy đưa hoa vào khung hình vuông, AI sẽ tự động quét.</p>
+            
+            <div id="camera-container">
+                <video id="video" autoplay playsinline muted></video>
+                <div id="scanner-overlay">
+                    <div id="scanner-frame">
+                        <div id="scanner-line"></div>
+                    </div>
+                </div>
+                <div id="status-indicator">
+                    <div class="status-dot" id="status-dot"></div>
+                    <span id="status-text">Đang chờ...</span>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; justify-content:center; margin-bottom:20px">
+                <button id="startBtn" class="btn" onclick="startCamera()"><i class="fas fa-video"></i> Bật Camera</button>
+                <button id="stopBtn" class="btn btn-secondary" onclick="stopCamera()" style="display:none"><i class="fas fa-video-slash"></i> Tắt Camera</button>
+            </div>
+            
+            <div id="quick-res" class="card" style="display:none; text-align: left; border-left: 5px solid var(--primary); animation: fadeIn 0.3s">
+                <div style="display:flex; justify-content:space-between; align-items:start">
+                    <div>
+                        <h3 id="rn" style="color:var(--primary)"></h3>
+                        <p id="rf" style="font-style:italic; color:#64748b; margin-bottom:10px;"></p>
+                    </div>
+                    <button class="btn btn-outline" style="padding:5px 10px; font-size:0.8rem" onclick="viewDetailFromScan()">Chi tiết</button>
+                </div>
+            </div>
+
+            <div style="margin-top:20px; border-top:1px solid #eee; padding-top:20px">
+                <p style="color:#64748b; font-size:0.9rem">Hoặc tải lên ảnh có sẵn:</p>
+                <input type="file" id="fi" style="display:none" onchange="pre(event)">
+                <button class="btn btn-outline" style="margin-top:10px" onclick="document.getElementById('fi').click()">
+                    <i class="fas fa-upload"></i> Chọn ảnh từ máy
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-gallery" class="view-section">
+        <h2 style="margin-bottom:20px">Khám Phá Các Loài Hoa</h2>
+        <div id="gg" class="grid"></div>
+    </div>
+</div>
+
+<div id="modal" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></div>
+        <img id="mn" src="" style="width:100%; height:300px; object-fit:cover;">
+        <div style="padding:25px">
+            <h2 id="mt" style="color:var(--primary)"></h2>
+            <p id="mf" style="font-style:italic; color:#64748b; margin-bottom:15px"></p>
+            <div style="margin-bottom:20px; border-bottom:1px solid #eee; padding-bottom:20px">
+                <h4 style="margin-bottom:8px; display:flex; align-items:center; gap:8px"><i class="fas fa-info-circle" style="color:var(--primary)"></i> Giới thiệu</h4>
+                <p id="md" style="line-height:1.6; color:#334155; font-size:0.95rem"></p>
+            </div>
+            <div style="margin-bottom:20px">
+                <h4 style="margin-bottom:8px; display:flex; align-items:center; gap:8px"><i class="fas fa-hand-holding-heart" style="color:var(--primary)"></i> Hướng dẫn chăm sóc</h4>
+                <p id="mc" style="line-height:1.6; color:#334155; font-size:0.95rem"></p>
+            </div>
+            <button class="btn" style="width:100%; justify-content:center" onclick="askDetail()"><i class="fas fa-comment-alt"></i> Hỏi chuyên gia về hoa này</button>
+        </div>
+    </div>
+</div>
+
+<div id="chat-ui">
+    <div style="background:var(--primary); color:white; padding:15px; display:flex; justify-content:space-between; align-items:center; font-weight:600">
+        <span><i class="fas fa-robot"></i> Tư vấn hoa AI</span><i class="fas fa-times" onclick="tc()" style="cursor:pointer"></i>
+    </div>
+    <div id="cm" style="flex:1; padding:15px; overflow-y:auto; font-size:0.9rem; background:#f8fafc; display:flex; flex-direction:column; gap:10px"></div>
+    <div style="padding:10px; display:flex; border-top:1px solid #eee; background:white; gap:5px">
+        <input type="text" id="ci" style="flex:1; border:1px solid #e2e8f0; outline:none; padding:10px; border-radius:8px" placeholder="Nhập câu hỏi...">
+        <button class="btn" style="padding:10px" onclick="sc()"><i class="fas fa-paper-plane"></i></button>
+    </div>
+</div>
+<button onclick="tc()" style="position:fixed; bottom:20px; right:20px; width:55px; height:55px; border-radius:50%; background:var(--primary); color:white; border:none; cursor:pointer; box-shadow: var(--shadow); z-index:999; display:flex; align-items:center; justify-content:center">
+    <i class="fas fa-comment-dots fa-lg"></i>
+</button>
+
+<script>
+    let u=null, isR=false, curH="", flowersData=[], currentScanResult = null;
+    let stream = null, isApiCalling = false, autoScanInterval = null;
+    const video = document.getElementById('video');
+    const scannerLine = document.getElementById('scanner-line');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
+    const api = (url, m='GET', b=null) => fetch(url, {method:m, headers:{'Content-Type':'application/json'}, body:b?JSON.stringify(b):null, credentials:'include'});
+
+    window.onload = check;
+
+    async function check() {
+        const r = await api('/api/profile');
+        if(r.ok) { u = await r.json(); upU(); switchView('view-recognize'); }
+    }
+
+    function upU() {
+        document.getElementById('userSection').innerHTML = u ? `<a class="nav-link" style="color:var(--primary)"><b>${u.fullname}</b></a><a class="nav-link" onclick="logout()" style="color:#ef4444">Thoát</a>` : `<a class="nav-link" onclick="switchView('view-auth')">Đăng Nhập</a>`;
+    }
+
+    function switchView(v) {
+        document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+        document.getElementById(v).classList.add('active');
+        // Thêm class active cho nav link tương ứng
+        if(v === 'view-recognize') document.querySelectorAll('.nav-link')[0].classList.add('active');
+        if(v === 'view-gallery') {
+            document.querySelectorAll('.nav-link')[1].classList.add('active');
+            loadG();
+            stopCamera(); // Tắt camera khi chuyển tab
+        }
+        if(v === 'view-auth') stopCamera();
+    }
+
+    // --- AUTH LOGIC ---
+    async function auth() {
+        const user = document.getElementById('au').value, pass = document.getElementById('ap').value;
+        if(!user || !pass) return alert("Nhập đủ thông tin!");
+        const r = await api(isR ? '/api/register' : '/api/login', 'POST', {tendangnhap:user, matkhau:pass, hoten:user});
+        if(r.ok) { isR ? (alert("Đăng ký xong! Hãy đăng nhập."), toggleA()) : check(); } else alert("Sai thông tin hoặc lỗi!");
+    }
+    function toggleA() { isR=!isR; document.getElementById('authT').innerText = isR ? "Tạo Tài Khoản" : "Đăng Nhập"; document.querySelector('#view-auth .btn').innerText = isR ? "Đăng Ký" : "Xác Nhận"; }
+    async function logout() { await api('/api/logout', 'POST'); u=null; upU(); switchView('view-auth'); }
+
+    // --- CAMERA LOGIC (NÂNG CẤP) ---
+async function startCamera() {
+    if(!u) return alert("Vui lòng đăng nhập để sử dụng chức năng này!");
+    try {
+        // facingMode (có chữ g) là tiêu chuẩn chính xác
+        const constraints = {
+            video: { 
+                facingMode: 'environment', // Ưu tiên camera sau
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            } 
+        };
+        
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        video.srcObject = stream;
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'inline-flex';
+        scannerLine.style.display = 'block';
+        
+        statusText.innerText = "Camera đã sẵn sàng...";
+        
+        // Đợi video tải xong metadata mới bắt đầu quét
+        video.onloadedmetadata = () => {
+            setTimeout(() => {
+                if(stream) startAutoScan();
+            }, 2000);
+        };
+
+    } catch (err) {
+        console.error("Lỗi camera chi tiết:", err);
+        let errorMsg = "Không thể truy cập camera.";
+        if (err.name === 'NotAllowedError') errorMsg = "Bạn đã từ chối quyền truy cập camera. Hãy bật lại trong cài đặt trình duyệt.";
+        if (err.name === 'NotFoundError') errorMsg = "Không tìm thấy thiết bị camera nào.";
+        
+        alert(errorMsg);
+        statusText.innerText = "Lỗi camera";
+    }
+}
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+            stream = null;
+        }
+        stopAutoScan();
+        document.getElementById('startBtn').style.display = 'inline-flex';
+        document.getElementById('stopBtn').style.display = 'none';
+        scannerLine.style.display = 'none';
+        statusText.innerText = "Đang chờ...";
+        statusDot.classList.remove('active');
+        document.getElementById('quick-res').style.display = 'none';
+    }
+
+    // --- TỰ ĐỘNG QUÉT (AUTO SCAN) LOGIC ---
+    function startAutoScan() {
+        if (autoScanInterval) return;
+        statusDot.classList.add('active');
+        statusText.innerText = "Đang quét...";
+        // Quét mỗi 5 giây
+        autoScanInterval = setInterval(captureAndRecognize, 5000); 
+    }
+
+    function stopAutoScan() {
+        if (autoScanInterval) {
+            clearInterval(autoScanInterval);
+            autoScanInterval = null;
+        }
+    }
+
+    async function captureAndRecognize() {
+        if (!stream || isApiCalling || !u) return;
+
+        // Tạo canvas để chụp ảnh từ video stream
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        
+        // Vẽ frame hiện tại của video lên canvas
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Chuyển canvas thành base64 string (jpeg để dung lượng nhỏ)
+        const base64Image = canvas.toDataURL('image/jpeg', 0.7);
+
+        isApiCalling = true;
+        statusText.innerText = "AI đang phân tích...";
+        
+        try {
+            const r = await fetch('/api/recognize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_base64: base64Image }),
+                credentials: 'include'
+            });
+
+            if (!r.ok) throw new Error("API lỗi");
+            
+            const d = await r.json();
+            
+            // Xử lý kết quả
+            if (d.name && d.name !== 'Không xác định') {
+                showQuickResult(d);
+                // Nếu tìm thấy hoa, tạm dừng quét tự động 10 giây để người dùng xem
+                stopAutoScan();
+                statusText.innerText = "Đã tìm thấy!";
+                setTimeout(() => {
+                    if(stream) startAutoScan();
+                }, 10000);
+            } else {
+                statusText.innerText = "Đang quét...";
+                document.getElementById('quick-res').style.display = 'none';
+            }
+
+        } catch (err) {
+            console.error("Lỗi tự động quét:", err);
+            statusText.innerText = "Lỗi kết nối AI";
+        } finally {
+            isApiCalling = false;
+        }
+    }
+
+    function showQuickResult(data) {
+        currentScanResult = data;
+        document.getElementById('rn').innerText = data.name;
+        document.getElementById('rf').innerText = "Họ: " + (data.family || "Chưa rõ");
+        document.getElementById('quick-res').style.display = 'block';
+        curH = data.name; // Cập nhật ngữ cảnh cho chatbot
+    }
+
+    function viewDetailFromScan() {
+        if(!currentScanResult) return;
+        stopCamera(); // Tắt camera khi xem chi tiết
+        // Sử dụng ảnh base64 cuối cùng từ canvas làm ảnh nền modal (tùy chọn phức tạp hơn)
+        // Hiện tại chỉ show text
+        document.getElementById('mn').src = ""; // Cần logic lưu ảnh tạm nếu muốn show
+        document.getElementById('mt').innerText = currentScanResult.name;
+        document.getElementById('mf').innerText = "Họ: " + (currentScanResult.family || "Chưa rõ");
+        document.getElementById('md').innerText = currentScanResult.description;
+        document.getElementById('mc').innerText = currentScanResult.care;
+        document.getElementById('modal').style.display = 'flex';
+    }
+
+    // --- TẢI ẢNH LÊN LOGIC (Giữ nguyên và tối ưu) ---
+    function pre(e) {
+        const f = e.target.files[0];
+        if(f) { 
+            stopCamera(); // Tắt camera nếu đang bật
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const base64Image = event.target.result;
+                // Hiển thị loading nhanh
+                statusText.innerText = "AI đang phân tích ảnh...";
+                statusDot.classList.add('active');
+                
+                try {
+                    const r = await fetch('/api/recognize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image_base64: base64Image }),
+                        credentials: 'include'
+                    });
+                    const d = await r.json();
+                    if(r.ok && d.name && d.name !== 'Không xác định') {
+                        showQuickResult(d);
+                        statusText.innerText = "Hoàn tất.";
+                    } else {
+                        alert("Không nhận diện được hoa trong ảnh.");
+                        statusText.innerText = "Đang chờ...";
+                    }
+                } catch(err) {
+                    alert("Lỗi kết nối server.");
+                } finally {
+                    statusDot.classList.remove('active');
+                }
+            };
+            reader.readAsDataURL(f);
+        }
+    }
+
+    // --- GALLERY LOGIC (Giữ nguyên) ---
+    async function loadG() {
+        const grid = document.getElementById('gg');
+        grid.innerHTML = '<p style="text-align:center; color:#64748b; grid-column: 1/-1">Đang tải thư viện...</p>';
+        const r = await api('/api/flowers');
+        flowersData = await r.json();
+        if(flowersData.length === 0) {
+            grid.innerHTML = '<p style="text-align:center; color:#64748b; grid-column: 1/-1">Chưa có dữ liệu hoa.</p>';
+            return;
+        }
+        grid.innerHTML = flowersData.map((f, i) => `
+            <div class="flower-item" onclick="openDetail(${i})">
+                <img src="${f.image_url}" class="flower-img" onerror="this.src='https://via.placeholder.com/300x200?text=No+Image'">
+                <div class="flower-body">
+                    <h4 style="color:var(--primary)">${f.name}</h4>
+                    <p style="font-size:0.8rem; color:#64748b">${f.family || "Chưa rõ họ"}</p>
+                </div>
+            </div>`).join('');
+    }
+
+    function openDetail(index) {
+        const f = flowersData[index];
+        document.getElementById('mn').src = f.image_url;
+        document.getElementById('mt').innerText = f.name;
+        document.getElementById('mf').innerText = "Họ: " + (f.family || "Chưa rõ");
+        document.getElementById('md').innerText = f.description || "Chưa có mô tả.";
+        document.getElementById('mc').innerText = f.care || "Chưa có hướng dẫn chăm sóc.";
+        document.getElementById('modal').style.display = 'flex';
+        curH = f.name;
+    }
+
+    function closeModal(e) { 
+        if(!e || e.target.id === 'modal' || e.target.closest('.modal-close')) {
+            document.getElementById('modal').style.display = 'none'; 
+        }
+    }
+
+    // --- CHATBOT LOGIC (Giữ nguyên và tối ưu) ---
+    function tc() { const c = document.getElementById('chat-ui'); c.style.display = c.style.display==='flex'?'none':'flex'; }
+    function askDetail() { document.getElementById('modal').style.display = 'none'; tc(); document.getElementById('ci').value = `Cách chăm sóc hoa ${curH} như thế nào?`; sc(); }
+    async function sc() {
+        const i = document.getElementById('ci'), m = i.value, cm = document.getElementById('cm'); 
+        if(!m || isApiCalling) return;
+        cm.innerHTML += `<div style="text-align:right; align-self:flex-end"><span style="background:#e2e8f0; padding:8px 12px; border-radius:12px; display:inline-block; max-width:80%">${m}</span></div>`;
+        i.value=""; i.disabled = true;
+        
+        cm.innerHTML += `<div id="ai-loading" style="color:#64748b; font-size:0.8rem">AI đang suy nghĩ...</div>`;
+        cm.scrollTop = cm.scrollHeight;
+
+        try {
+            const r = await api('/api/chat', 'POST', {message:m, context:curH});
+            const d = await r.json();
+            document.getElementById('ai-loading').remove();
+            cm.innerHTML += `<div><span style="background:rgba(16, 185, 129, 0.1); color:var(--primary); padding:8px 12px; border-radius:12px; display:inline-block; max-width:80%"><b>AI:</b> ${d.reply}</span></div>`;
+        } catch {
+            document.getElementById('ai-loading').remove();
+            cm.innerHTML += `<div style="color:#ef4444; font-size:0.8rem">Lỗi kết nối AI.</div>`;
+        } finally {
+            i.disabled = false; i.focus();
+            cm.scrollTop = cm.scrollHeight;
+        }
+    }
+    // Hỗ trợ Enter để gửi chat
+    document.getElementById('ci').addEventListener('keypress', (e) => { if(e.key === 'Enter') sc(); });
+</script>
+</body>
+</html>
